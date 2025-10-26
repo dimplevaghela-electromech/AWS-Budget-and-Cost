@@ -25,16 +25,16 @@ Parameters:
     Description: Type of alert to receive (ACTUAL, FORECASTED, or BOTH)
   EC2UsageLimit:
     Type: Number
-    Description: EC2 instance usage limit
+    Description: EC2 instance usage limit (hours)
   RDSUsageLimit:
     Type: Number
-    Description: RDS instance usage limit
+    Description: RDS instance usage limit (hours)
   VPCUsageLimit:
     Type: Number
-    Description: VPC usage limit
+    Description: VPC usage limit (hours)
   S3UsageLimit:
     Type: Number
-    Description: S3 usage limit
+    Description: S3 usage limit (GB-Month)
 
 Conditions:
   IsActual: !Equals [!Ref AlertType, ACTUAL]
@@ -59,8 +59,7 @@ Resources:
       NotificationsWithSubscribers:
         - !If
           - IsActual
-          - 
-            Notification:
+          - Notification:
               NotificationType: ACTUAL
               ComparisonOperator: GREATER_THAN
               Threshold: 80
@@ -71,8 +70,7 @@ Resources:
           - !Ref AWS::NoValue
         - !If
           - IsForecasted
-          - 
-            Notification:
+          - Notification:
               NotificationType: FORECASTED
               ComparisonOperator: GREATER_THAN
               Threshold: 80
@@ -83,9 +81,8 @@ Resources:
           - !Ref AWS::NoValue
         - !If
           - IsBoth
-          - 
-            Notification:
-              NotificationType: FORECASTED
+          - Notification:
+              NotificationType: ACTUAL
               ComparisonOperator: GREATER_THAN
               Threshold: 80
               ThresholdType: PERCENTAGE
@@ -94,8 +91,29 @@ Resources:
                 Address: !Ref Email
           - !Ref AWS::NoValue
 
+  DailyBudgetForecastedNotification:
+    Type: AWS::Budgets::Budget
+    Condition: IsBoth
+    Properties:
+      Budget:
+        BudgetName: DailyBudgetForecasted
+        BudgetType: COST
+        TimeUnit: DAILY
+        BudgetLimit:
+          Amount: !Ref DailyThreshold
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref Email
+
   ######################################
-  # Weekly Budget
+  # Weekly Budget (using MONTHLY)
   ######################################
   WeeklyBudget:
     Type: AWS::Budgets::Budget
@@ -103,7 +121,7 @@ Resources:
       Budget:
         BudgetName: WeeklyBudget
         BudgetType: COST
-        TimeUnit: WEEKLY
+        TimeUnit: MONTHLY
         BudgetLimit:
           Amount: !Ref WeeklyThreshold
           Unit: USD
@@ -152,7 +170,10 @@ Resources:
         TimeUnit: MONTHLY
         BudgetLimit:
           Amount: !Ref EC2UsageLimit
-          Unit: Count
+          Unit: Hrs
+        CostFilters:
+          UsageTypeGroup:
+            - EC2-Instance
       NotificationsWithSubscribers:
         - Notification:
             NotificationType: ACTUAL
@@ -175,7 +196,10 @@ Resources:
         TimeUnit: MONTHLY
         BudgetLimit:
           Amount: !Ref RDSUsageLimit
-          Unit: Count
+          Unit: Hrs
+        CostFilters:
+          UsageTypeGroup:
+            - RDS-Running-Hours
       NotificationsWithSubscribers:
         - Notification:
             NotificationType: ACTUAL
@@ -198,7 +222,10 @@ Resources:
         TimeUnit: MONTHLY
         BudgetLimit:
           Amount: !Ref VPCUsageLimit
-          Unit: Count
+          Unit: Hrs
+        CostFilters:
+          UsageTypeGroup:
+            - VPC-Usage
       NotificationsWithSubscribers:
         - Notification:
             NotificationType: ACTUAL
@@ -221,7 +248,11 @@ Resources:
         TimeUnit: MONTHLY
         BudgetLimit:
           Amount: !Ref S3UsageLimit
-          Unit: GB
+          Unit: GB-Month
+        CostFilters:
+          UsageTypeGroup:
+            - S3-API-Request
+            - S3-Storage-Class
       NotificationsWithSubscribers:
         - Notification:
             NotificationType: ACTUAL
@@ -231,4 +262,3 @@ Resources:
           Subscribers:
             - SubscriptionType: EMAIL
               Address: !Ref Email
-
