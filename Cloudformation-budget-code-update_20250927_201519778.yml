@@ -1,147 +1,234 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation template to create AWS Budgets with alarms for daily, weekly, and monthly thresholds, and usage budgets for EC2, RDS, VPC, and S3.
+Description: >
+  CloudFormation template to create AWS Budgets with alarms for daily, weekly, and monthly thresholds,
+  and usage budgets for EC2, RDS, VPC, and S3 with conditional alert types.
 
 Parameters:
   DailyThreshold:
-   Type: Number
-   Description: Daily budget threshold in USD
+    Type: Number
+    Description: Daily budget threshold in USD
   WeeklyThreshold:
-   Type: Number
-   Description: Weekly budget threshold in USD
+    Type: Number
+    Description: Weekly budget threshold in USD
   MonthlyThreshold:
-   Type: Number
-   Description: Monthly budget threshold in USD
+    Type: Number
+    Description: Monthly budget threshold in USD
   Email:
-   Type: String
-   Description: Email address to receive budget alerts
+    Type: String
+    Description: Email address to receive budget alerts
   AlertType:
-   Type: String
-   AllowedValues: 
-    - ACTUAL
-    - FORECASTED
-    - BOTH
-   Description: Type of alert to receive (ACTUAL, FORECASTED, or BOTH)
+    Type: String
+    AllowedValues:
+      - ACTUAL
+      - FORECASTED
+      - BOTH
+    Description: Type of alert to receive (ACTUAL, FORECASTED, or BOTH)
   EC2UsageLimit:
-   Type: Number
-   Description: EC2 instance usage limit
+    Type: Number
+    Description: EC2 instance usage limit
   RDSUsageLimit:
-   Type: Number
-   Description: RDS instance usage limit
+    Type: Number
+    Description: RDS instance usage limit
   VPCUsageLimit:
-   Type: Number
-   Description: VPC usage limit
+    Type: Number
+    Description: VPC usage limit
   S3UsageLimit:
-   Type: Number
-   Description: S3 usage limit
-
-Resources:
-  DailyBudget:
-   Type: AWS::Budgets::Budget
-   Properties: 
-    Budget: 
-     BudgetType: COST
-     TimeUnit: DAILY
-     BudgetLimit: 
-      Amount: !Ref DailyThreshold
-      Unit: USD
-     NotifyOn: 
-      !If 
-       - [ IsBoth, !Ref AWS::NoValue, !Ref AlertType ]
-     Subscribers: 
-      - SubscriptionType: EMAIL
-        Address: !Ref Email
-
-  WeeklyBudget:
-   Type: AWS::Budgets::Budget
-   Properties: 
-    Budget: 
-     BudgetType: COST
-     TimeUnit: WEEKLY
-     BudgetLimit: 
-      Amount: !Ref WeeklyThreshold
-      Unit: USD
-     NotifyOn: 
-      !If 
-       - [ IsBoth, !Ref AWS::NoValue, !Ref AlertType ]
-     Subscribers: 
-      - SubscriptionType: EMAIL
-        Address: !Ref Email
-
-  MonthlyBudget:
-   Type: AWS::Budgets::Budget
-   Properties: 
-    Budget: 
-     BudgetType: COST
-     TimeUnit: MONTHLY
-     BudgetLimit: 
-      Amount: !Ref MonthlyThreshold
-      Unit: USD
-     NotifyOn: 
-      !If 
-       - [ IsBoth, !Ref AWS::NoValue, !Ref AlertType ]
-     Subscribers: 
-      - SubscriptionType: EMAIL
-        Address: !Ref Email
-
-  EC2UsageBudget:
-   Type: AWS::Budgets::Budget
-   Properties: 
-    Budget: 
-     BudgetType: USAGE
-     TimeUnit: MONTHLY
-     BudgetLimit: 
-      Amount: !Ref EC2UsageLimit
-      Unit: Count
-     NotifyOn: 
-      - ACTUAL
-     Subscribers: 
-      - SubscriptionType: EMAIL
-        Address: !Ref Email
-
-  RDSUsageBudget:
-   Type: AWS::Budgets::Budget
-   Properties: 
-    Budget: 
-     BudgetType: USAGE
-     TimeUnit: MONTHLY
-     BudgetLimit: 
-      Amount: !Ref RDSUsageLimit
-      Unit: Count
-     NotifyOn: 
-      - ACTUAL
-     Subscribers: 
-      - SubscriptionType: EMAIL
-        Address: !Ref Email
-
-  VPCUsageBudget:
-   Type: AWS::Budgets::Budget
-   Properties: 
-    Budget: 
-     BudgetType: USAGE
-     TimeUnit: MONTHLY
-     BudgetLimit: 
-      Amount: !Ref VPCUsageLimit
-      Unit: Count
-     NotifyOn: 
-      - ACTUAL
-     Subscribers: 
-      - SubscriptionType: EMAIL
-        Address: !Ref Email
-
-  S3UsageBudget:
-   Type: AWS::Budgets::Budget
-   Properties: 
-    Budget: 
-     BudgetType: USAGE
-     TimeUnit: MONTHLY
-     BudgetLimit: 
-      Amount: !Ref S3UsageLimit
-      Unit: GB
-     NotifyOn: 
-      - ACTUAL
-     Subscribers: 
-      - SubscriptionType: EMAIL
-        Address: !Ref Email
+    Type: Number
+    Description: S3 usage limit
 
 Conditions:
+  IsActual: !Equals [!Ref AlertType, ACTUAL]
+  IsForecasted: !Equals [!Ref AlertType, FORECASTED]
   IsBoth: !Equals [!Ref AlertType, BOTH]
+
+Resources:
+
+  ######################################
+  # Daily Budget
+  ######################################
+  DailyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: DailyBudget
+        BudgetType: COST
+        TimeUnit: DAILY
+        BudgetLimit:
+          Amount: !Ref DailyThreshold
+          Unit: USD
+      NotificationsWithSubscribers:
+        - !If
+          - IsActual
+          - 
+            Notification:
+              NotificationType: ACTUAL
+              ComparisonOperator: GREATER_THAN
+              Threshold: 80
+              ThresholdType: PERCENTAGE
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: !Ref Email
+          - !Ref AWS::NoValue
+        - !If
+          - IsForecasted
+          - 
+            Notification:
+              NotificationType: FORECASTED
+              ComparisonOperator: GREATER_THAN
+              Threshold: 80
+              ThresholdType: PERCENTAGE
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: !Ref Email
+          - !Ref AWS::NoValue
+        - !If
+          - IsBoth
+          - 
+            Notification:
+              NotificationType: FORECASTED
+              ComparisonOperator: GREATER_THAN
+              Threshold: 80
+              ThresholdType: PERCENTAGE
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: !Ref Email
+          - !Ref AWS::NoValue
+
+  ######################################
+  # Weekly Budget
+  ######################################
+  WeeklyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: WeeklyBudget
+        BudgetType: COST
+        TimeUnit: WEEKLY
+        BudgetLimit:
+          Amount: !Ref WeeklyThreshold
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref Email
+
+  ######################################
+  # Monthly Budget
+  ######################################
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: MonthlyBudget
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyThreshold
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref Email
+
+  ######################################
+  # EC2 Usage Budget
+  ######################################
+  EC2UsageBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: EC2UsageBudget
+        BudgetType: USAGE
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref EC2UsageLimit
+          Unit: Count
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref Email
+
+  ######################################
+  # RDS Usage Budget
+  ######################################
+  RDSUsageBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: RDSUsageBudget
+        BudgetType: USAGE
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref RDSUsageLimit
+          Unit: Count
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref Email
+
+  ######################################
+  # VPC Usage Budget
+  ######################################
+  VPCUsageBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: VPCUsageBudget
+        BudgetType: USAGE
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref VPCUsageLimit
+          Unit: Count
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref Email
+
+  ######################################
+  # S3 Usage Budget
+  ######################################
+  S3UsageBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: S3UsageBudget
+        BudgetType: USAGE
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref S3UsageLimit
+          Unit: GB
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref Email
+
